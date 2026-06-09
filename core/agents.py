@@ -11,6 +11,7 @@ Você pode responder outras perguntas do usuário, mas se ele perguntar de outro
 
 agent = create_agent(
     model=model,
+    debug=True,
     system_prompt=SystemMessage(content=system_prompt),
 )
 

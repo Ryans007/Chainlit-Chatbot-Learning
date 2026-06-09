@@ -1,13 +1,54 @@
 # ChatBot Chainlit
 
-Chatbot conversacional com interface web construído com **Chainlit**, **LangGraph** e **LangChain**, rodando modelos locais via **Ollama**.
+Chatbot conversacional com interface web construído com **Chainlit**, **LangGraph** e **LangChain**, rodando modelos locais via **Ollama**. O projeto permite comparar três abordagens diferentes de resposta com base em documentos enviados pelo usuário.
 
-## Funcionalidades
+## Modos de operação
 
-- Interface de chat web em tempo real
-- Memória de conversa por sessão (thread separada por usuário)
-- Upload e leitura de arquivos (PDF, TXT, e outros formatos de texto)
-- Agente LangGraph com histórico de mensagens
+O modo é controlado pela variável `USE_RAG` no topo do arquivo `app.py`:
+
+### Modo 1 — Sem RAG (`USE_RAG = False`)
+
+```python
+# app.py
+USE_RAG = False
+```
+
+O texto do arquivo enviado pelo usuário é extraído e colado diretamente no prompt, junto com a mensagem. O modelo recebe tudo como contexto bruto.
+
+```
+START → response → END
+```
+
+### Modo 2 — RAG via nó (`USE_RAG = True`)
+
+```python
+# app.py
+USE_RAG = True
+```
+
+O arquivo enviado é indexado no FAISS da sessão. A cada mensagem, um nó de recuperação busca os trechos mais relevantes antes de passar para o modelo. O índice é isolado por sessão — cada usuário tem o seu.
+
+```
+START → rag → response → END
+```
+
+### Modo 3 — RAG via tool (experimental)
+
+O agente tem acesso a uma tool `retrieve_documents_tool` que ele pode chamar quando julgar necessário. Para ativar, configure o agente em `core/agents.py` passando a tool:
+
+```python
+from core.rag.tools import retrieve_documents_tool
+
+agent = create_agent(
+    model=model,
+    tools=[retrieve_documents_tool],
+    system_prompt=SystemMessage(content=system_prompt),
+)
+```
+
+```
+START → response (com tool disponível) → END
+```
 
 ## Exemplos
 
@@ -27,13 +68,19 @@ Chatbot conversacional com interface web construído com **Chainlit**, **LangGra
 | [LangGraph](https://langchain-ai.github.io/langgraph/) | 1.2.4 | Orquestração do agente com estado |
 | [LangChain](https://langchain.com) | 1.3.3 | Integração com modelos e ferramentas |
 | [langchain-ollama](https://python.langchain.com/docs/integrations/llms/ollama) | 1.1.0 | Conexão com modelos locais via Ollama |
+| [FAISS](https://github.com/facebookresearch/faiss) | — | Índice vetorial para recuperação semântica |
 | [pypdf](https://pypdf.readthedocs.io) | 6.12.2 | Extração de texto de arquivos PDF |
-| [Ollama](https://ollama.com) | — | Execução local de LLMs |
+| [Ollama](https://ollama.com) | — | Execução local de LLMs e embeddings |
 
 ## Pré-requisitos
 
 - Python 3.10+
 - [Ollama](https://ollama.com) instalado e rodando localmente
+- Modelo de embedding `nomic-embed-text` disponível no Ollama (necessário para os modos com RAG)
+
+```bash
+ollama pull nomic-embed-text
+```
 
 ## Instalação
 
@@ -67,12 +114,19 @@ Acesse `http://localhost:8080` no navegador.
 
 ```
 .
-├── app.py          # Ponto de entrada Chainlit (handlers de mensagem)
+├── app.py                  # Ponto de entrada Chainlit — define USE_RAG
 ├── core/
-│   ├── agents.py   # Configuração do modelo e agente LangChain
-│   ├── graph.py    # Grafo LangGraph com memória
-│   ├── nodes.py    # Nó de resposta do grafo
-│   └── state.py    # Definição do estado da conversa
-├── assets/         # Imagens de exemplo
+│   ├── agents.py           # Configuração do modelo e agente LangChain
+│   ├── graph.py            # Grafo sem RAG (texto colado no prompt)
+│   ├── graph_rag.py        # Grafo com nó RAG antes do response
+│   ├── nodes.py            # Nós: rag() e response()
+│   ├── state.py            # Definição do estado da conversa
+│   └── rag/
+│       ├── vectorstore.py  # Criação e carregamento do índice FAISS
+│       └── tools.py        # Tool de recuperação para o agente
+├── docs/                   # PDFs para indexação fixa (uso futuro)
+├── config/
+│   └── faiss_index/        # Índice FAISS salvo em disco
+├── assets/                 # Imagens de exemplo
 └── requirements.txt
 ```
